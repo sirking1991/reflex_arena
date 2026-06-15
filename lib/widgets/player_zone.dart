@@ -27,8 +27,10 @@ class PlayerZone extends StatefulWidget {
   State<PlayerZone> createState() => _PlayerZoneState();
 }
 
-class _PlayerZoneState extends State<PlayerZone> with SingleTickerProviderStateMixin {
+class _PlayerZoneState extends State<PlayerZone> with TickerProviderStateMixin {
   late AnimationController _rippleController;
+  late AnimationController _gridController;
+  late AnimationController _winController;
   Offset _tapPosition = Offset.zero;
   bool _showRipple = false;
 
@@ -39,11 +41,38 @@ class _PlayerZoneState extends State<PlayerZone> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
+
+    _gridController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 15),
+    )..repeat();
+
+    _winController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+
+    if (widget.isWinner) {
+      _winController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PlayerZone oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isWinner && !oldWidget.isWinner) {
+      _winController.repeat(reverse: true);
+    } else if (!widget.isWinner && oldWidget.isWinner) {
+      _winController.stop();
+      _winController.value = 0.0;
+    }
   }
 
   @override
   void dispose() {
     _rippleController.dispose();
+    _gridController.dispose();
+    _winController.dispose();
     super.dispose();
   }
 
@@ -68,211 +97,222 @@ class _PlayerZoneState extends State<PlayerZone> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    // Determine background color and borders based on state
-    Color borderColor = widget.baseColor.withValues(alpha: 0.3);
-    Color cardColor = CyberColors.background;
-
-    if (widget.isFouled) {
-      borderColor = CyberColors.foul;
-      cardColor = CyberColors.frozenOverlay;
-    } else if (widget.isWinner) {
-      borderColor = widget.baseColor;
-      cardColor = widget.baseColor.withValues(alpha: 0.08);
-    }
-
     return GestureDetector(
       onTapDown: _handleTapDown,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        decoration: BoxDecoration(
-          color: cardColor,
-          border: Border.all(
-            color: borderColor,
-            width: widget.isWinner ? 3.0 : 1.5,
-          ),
-          boxShadow: widget.isWinner
-              ? [
-                  BoxShadow(
-                    color: widget.baseColor.withValues(alpha: 0.3),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : null,
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Cyber Grid Background Watermark
-            Positioned.fill(
-              child: Opacity(
-                opacity: widget.isFouled ? 0.05 : 0.02,
-                child: CustomPaint(
-                  painter: ZoneGridPainter(isFouled: widget.isFouled),
-                ),
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_gridController, _winController]),
+        builder: (context, child) {
+          // Determine background color, borders, and shadows based on state
+          Color borderColor = widget.baseColor.withValues(alpha: 0.3);
+          Color cardColor = CyberColors.background;
+          double borderWidth = 1.5;
+          List<BoxShadow>? boxShadows;
+
+          if (widget.isFouled) {
+            borderColor = CyberColors.foul;
+            cardColor = CyberColors.frozenOverlay;
+          } else if (widget.isWinner) {
+            final double pulse = _winController.value;
+            borderColor = widget.baseColor;
+            borderWidth = 2.0 + pulse * 1.5;
+            cardColor = widget.baseColor.withValues(alpha: 0.05 + pulse * 0.05);
+            boxShadows = [
+              BoxShadow(
+                color: widget.baseColor.withValues(alpha: 0.2 + pulse * 0.2),
+                blurRadius: 16 + pulse * 16,
+                spreadRadius: 1 + pulse * 2,
               ),
+            ];
+          }
+
+          return Container(
+            decoration: BoxDecoration(
+              color: cardColor,
+              border: Border.all(
+                color: borderColor,
+                width: borderWidth,
+              ),
+              boxShadow: boxShadows,
             ),
-
-            // Large Watermark Text
-            Opacity(
-              opacity: widget.isWinner ? 0.06 : 0.03,
-              child: Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 76,
-                  fontWeight: FontWeight.w900,
-                  color: widget.baseColor,
-                  letterSpacing: 10,
-                ),
-              ),
-            ),
-
-            // Custom Neon Ripple overlay
-            if (_showRipple)
-              Positioned.fill(
-                child: AnimatedBuilder(
-                  animation: _rippleController,
-                  builder: (context, child) {
-                    return CustomPaint(
-                      painter: RipplePainter(
-                        position: _tapPosition,
-                        progress: _rippleController.value,
-                        color: widget.baseColor,
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-            // Foreground Layout: Scores & Labels
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                if (widget.isTugOfWar) ...[
-                  // Tug of War: Battery Cells Indicator
-                  const Text(
-                    "METER BALANCE",
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 2,
-                      color: CyberColors.textMuted,
+                // Cyber Grid Background Watermark with Ambient Drift / Scroll
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: widget.isFouled ? 0.05 : 0.02,
+                    child: CustomPaint(
+                      painter: ZoneGridPainter(
+                        isFouled: widget.isFouled,
+                        gridOffset: _gridController.value,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(3, (index) {
-                      // Player 1 scores are positive (+1, +2, +3)
-                      // Player 2 scores are negative (-1, -2, -3)
-                      final bool isLit = widget.isPlayer1
-                          ? widget.score > index
-                          : widget.score < -index;
-                      
-                      final cellColor = isLit 
-                          ? widget.baseColor 
-                          : CyberColors.targetInactive.withValues(alpha: 0.15);
-                      
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                        width: 48,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: cellColor,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: isLit ? widget.baseColor : CyberColors.targetInactive,
-                            width: 1.5,
+                ),
+
+                // Large Watermark Text
+                Opacity(
+                  opacity: widget.isWinner ? 0.06 : 0.03,
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 76,
+                      fontWeight: FontWeight.w900,
+                      color: widget.baseColor,
+                      letterSpacing: 10,
+                    ),
+                  ),
+                ),
+
+                // Custom Neon Ripple overlay
+                if (_showRipple)
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: _rippleController,
+                      builder: (context, child) {
+                        return CustomPaint(
+                          painter: RipplePainter(
+                            position: _tapPosition,
+                            progress: _rippleController.value,
+                            color: widget.baseColor,
                           ),
-                          boxShadow: isLit
+                        );
+                      },
+                    ),
+                  ),
+
+                // Foreground Layout: Scores & Labels
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (widget.isTugOfWar) ...[
+                      // Tug of War: Battery Cells Indicator
+                      const Text(
+                        "METER BALANCE",
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2,
+                          color: CyberColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(3, (index) {
+                          // Player 1 scores are positive (+1, +2, +3)
+                          // Player 2 scores are negative (-1, -2, -3)
+                          final bool isLit = widget.isPlayer1
+                              ? widget.score > index
+                              : widget.score < -index;
+                          
+                          final cellColor = isLit 
+                              ? widget.baseColor 
+                              : CyberColors.targetInactive.withValues(alpha: 0.15);
+                          
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            width: 48,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: cellColor,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: isLit ? widget.baseColor : CyberColors.targetInactive,
+                                width: 1.5,
+                              ),
+                              boxShadow: isLit
+                                  ? [
+                                      BoxShadow(
+                                        color: widget.baseColor.withValues(alpha: 0.5),
+                                        blurRadius: 10,
+                                        spreadRadius: 1,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isLit 
+                                      ? CyberColors.textLight 
+                                      : CyberColors.targetInactive.withValues(alpha: 0.3),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      // Classic / Fake Out: Score Text with Switch Animation
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        transitionBuilder: (Widget child, Animation<double> animation) {
+                          return ScaleTransition(
+                            scale: animation,
+                            child: FadeTransition(opacity: animation, child: child),
+                          );
+                        },
+                        child: Text(
+                          "${widget.score}",
+                          key: ValueKey<int>(widget.score),
+                          style: TextStyle(
+                            fontSize: 100,
+                            fontWeight: FontWeight.w100,
+                            color: widget.baseColor,
+                            shadows: [
+                              Shadow(
+                                color: widget.baseColor.withValues(alpha: 0.4),
+                                blurRadius: 15,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    // Action Label
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: Text(
+                        widget.isFouled
+                            ? "SYSTEM FROZEN"
+                            : widget.isWinner
+                                ? "WINNER MATCH"
+                                : widget.label,
+                        key: ValueKey<String>(
+                            widget.isFouled ? "frozen" : widget.isWinner ? "winner" : "label"),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 4,
+                          color: widget.isFouled
+                              ? CyberColors.foul
+                              : CyberColors.textLight.withValues(alpha: 0.8),
+                          shadows: widget.isFouled
                               ? [
-                                  BoxShadow(
-                                    color: widget.baseColor.withValues(alpha: 0.5),
-                                    blurRadius: 10,
-                                    spreadRadius: 1,
-                                  ),
+                                  const Shadow(
+                                    color: CyberColors.foul,
+                                    blurRadius: 8,
+                                  )
                                 ]
                               : null,
                         ),
-                        child: Center(
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isLit 
-                                  ? CyberColors.textLight 
-                                  : CyberColors.targetInactive.withValues(alpha: 0.3),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 16),
-                ] else ...[
-                  // Classic / Fake Out: Score Text with Switch Animation
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return ScaleTransition(
-                        scale: animation,
-                        child: FadeTransition(opacity: animation, child: child),
-                      );
-                    },
-                    child: Text(
-                      "${widget.score}",
-                      key: ValueKey<int>(widget.score),
-                      style: TextStyle(
-                        fontSize: 100,
-                        fontWeight: FontWeight.w100,
-                        color: widget.baseColor,
-                        shadows: [
-                          Shadow(
-                            color: widget.baseColor.withValues(alpha: 0.4),
-                            blurRadius: 15,
-                          ),
-                        ],
                       ),
                     ),
-                  ),
-                ],
-
-                // Action Label
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    widget.isFouled
-                        ? "SYSTEM FROZEN"
-                        : widget.isWinner
-                            ? "WINNER MATCH"
-                            : widget.label,
-                    key: ValueKey<String>(
-                        widget.isFouled ? "frozen" : widget.isWinner ? "winner" : "label"),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 4,
-                      color: widget.isFouled
-                          ? CyberColors.foul
-                          : CyberColors.textLight.withValues(alpha: 0.8),
-                      shadows: widget.isFouled
-                          ? [
-                              const Shadow(
-                                color: CyberColors.foul,
-                                blurRadius: 8,
-                              )
-                            ]
-                          : null,
-                    ),
-                  ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -316,10 +356,12 @@ class RipplePainter extends CustomPainter {
   }
 }
 
-// Zone Background Grid Painter
+// Zone Background Grid Painter with drifting grid and hazard lines animation
 class ZoneGridPainter extends CustomPainter {
   final bool isFouled;
-  ZoneGridPainter({required this.isFouled});
+  final double gridOffset; // ranges from 0.0 to 1.0
+
+  ZoneGridPainter({required this.isFouled, required this.gridOffset});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -329,26 +371,31 @@ class ZoneGridPainter extends CustomPainter {
       ..strokeWidth = 0.5;
 
     const double step = 30.0;
-    for (double x = 0; x < size.width; x += step) {
+    final shift = gridOffset * step;
+
+    for (double x = -step + shift; x < size.width + step; x += step) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
-    for (double y = 0; y < size.height; y += step) {
+    for (double y = -step + shift; y < size.height + step; y += step) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
 
     if (isFouled) {
-      // Draw cross lines to denote lockout
+      // Draw scrolling cross lines to denote lockout (hazard warning)
       final Paint hazardPaint = Paint()
         ..color = CyberColors.foul.withValues(alpha: 0.15)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 4;
       
-      for (double y = -size.width; y < size.height; y += 60) {
+      final double hazardShift = gridOffset * 60.0;
+      
+      for (double y = -size.width - 60 + hazardShift; y < size.height + 60; y += 60) {
         canvas.drawLine(Offset(0, y), Offset(size.width, y + size.width), hazardPaint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(ZoneGridPainter oldDelegate) => oldDelegate.isFouled != isFouled;
+  bool shouldRepaint(ZoneGridPainter oldDelegate) =>
+      oldDelegate.isFouled != isFouled || oldDelegate.gridOffset != gridOffset;
 }

@@ -16,7 +16,7 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final math.Random _random = math.Random();
   
   int p1Score = 0;
@@ -44,6 +44,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
 
   // Shake animation controller
   late AnimationController _shakeController;
+  late AnimationController _backButtonController;
 
   @override
   void initState() {
@@ -53,6 +54,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
+
+    _backButtonController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
 
     // Warm up and start first round
     _initTimer = Timer(const Duration(seconds: 2), () {
@@ -74,6 +80,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     _rematchTimer?.cancel();
     _decoyTimer?.cancel();
     _shakeController.dispose();
+    _backButtonController.dispose();
     super.dispose();
   }
 
@@ -354,7 +361,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
             ),
           ),
 
-          // Central Floating Back Button (aligned left on divider line)
+          // Central Floating Back Button (aligned left on divider line) with pulse glow
           Positioned(
             left: 16,
             top: (MediaQuery.of(context).size.height / 2) - 22,
@@ -362,23 +369,35 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
               onTap: () {
                 Navigator.of(context).pop();
               },
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: CyberColors.cardBg,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: CyberColors.textMuted.withValues(alpha: 0.5),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: CyberColors.background.withValues(alpha: 0.5),
-                      blurRadius: 8,
+              child: AnimatedBuilder(
+                animation: _backButtonController,
+                builder: (context, child) {
+                  final double pulse = _backButtonController.value;
+                  return Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: CyberColors.cardBg,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: CyberColors.textMuted.withValues(alpha: 0.3 + pulse * 0.4),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: CyberColors.player1.withValues(alpha: 0.1 * pulse),
+                          blurRadius: 4 + pulse * 8,
+                          spreadRadius: pulse * 2,
+                        ),
+                        BoxShadow(
+                          color: CyberColors.background.withValues(alpha: 0.5),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                    child: child,
+                  );
+                },
                 child: const Icon(
                   Icons.arrow_back_rounded,
                   color: CyberColors.textLight,
@@ -411,7 +430,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          widget.mode.name.toUpperCase() + " CONFIGURATION LOADED",
+                          "${widget.mode.name.toUpperCase()} CONFIGURATION LOADED",
                           style: const TextStyle(
                             fontSize: 10,
                             letterSpacing: 2,
