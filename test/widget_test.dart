@@ -13,7 +13,8 @@ void main() {
 
     // Tap on Classic mode card to enter GameScreen
     await tester.tap(find.text('CLASSIC REFLEX'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     // Verify player zones are rendered
     expect(find.byType(PlayerZone), findsNWidgets(2));

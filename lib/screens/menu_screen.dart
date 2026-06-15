@@ -20,6 +20,12 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late AnimationController _gridController;
   late AnimationController _entranceController;
+  late AnimationController _titleBobController;
+
+  // Title Animations
+  late Animation<double> _titleBob;
+  late Animation<Color?> _reflexColor;
+  late Animation<Color?> _arenaColor;
 
   // Staggered Animations
   late Animation<double> _titleFade;
@@ -50,6 +56,38 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
     _entranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
+    );
+
+    _titleBobController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat(reverse: true);
+
+    _titleBob = Tween<double>(begin: -6.0, end: 6.0).animate(
+      CurvedAnimation(
+        parent: _titleBobController,
+        curve: Curves.easeInOutSine,
+      ),
+    );
+
+    _reflexColor = ColorTween(
+      begin: CyberColors.player1,
+      end: CyberColors.player2,
+    ).animate(
+      CurvedAnimation(
+        parent: _titleBobController,
+        curve: Curves.easeInOutSine,
+      ),
+    );
+
+    _arenaColor = ColorTween(
+      begin: CyberColors.player2,
+      end: CyberColors.player1,
+    ).animate(
+      CurvedAnimation(
+        parent: _titleBobController,
+        curve: Curves.easeInOutSine,
+      ),
     );
 
     // Staggered curve configurations
@@ -135,6 +173,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
     _pulseController.dispose();
     _gridController.dispose();
     _entranceController.dispose();
+    _titleBobController.dispose();
     super.dispose();
   }
 
@@ -184,55 +223,57 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                     );
                   },
                   child: Center(
-                    child: Column(
-                      children: [
-                        AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, child) {
-                            final blur = 8.0 + _pulseController.value * 12.0;
-                            return Text(
-                              "REFLEX",
-                              style: TextStyle(
-                                fontSize: 54,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 8,
-                                color: CyberColors.textLight,
-                                shadows: [
-                                  Shadow(
-                                    color: CyberColors.player1.withValues(alpha: 0.8),
-                                    blurRadius: blur,
-                                  ),
-                                  Shadow(
-                                    color: CyberColors.player2.withValues(alpha: 0.6),
-                                    blurRadius: blur * 1.5,
-                                  ),
-                                ],
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_pulseController, _titleBobController]),
+                      builder: (context, child) {
+                        final bobValue = _titleBob.value;
+                        final reflexColor = _reflexColor.value ?? CyberColors.player1;
+                        final arenaColor = _arenaColor.value ?? CyberColors.player2;
+                        final blur = 8.0 + _pulseController.value * 12.0;
+                        final arenaBlur = 6.0 + _pulseController.value * 8.0;
+
+                        return Transform.translate(
+                          offset: Offset(0, bobValue),
+                          child: Column(
+                            children: [
+                              Text(
+                                "REFLEX",
+                                style: TextStyle(
+                                  fontSize: 54,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 8,
+                                  color: reflexColor,
+                                  shadows: [
+                                    Shadow(
+                                      color: reflexColor.withValues(alpha: 0.8),
+                                      blurRadius: blur,
+                                    ),
+                                    Shadow(
+                                      color: arenaColor.withValues(alpha: 0.6),
+                                      blurRadius: blur * 1.5,
+                                    ),
+                                  ],
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                        AnimatedBuilder(
-                          animation: _pulseController,
-                          builder: (context, child) {
-                            final blur = 6.0 + _pulseController.value * 8.0;
-                            return Text(
-                              "ARENA",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w300,
-                                letterSpacing: 16,
-                                color: CyberColors.player1,
-                                shadows: [
-                                  Shadow(
-                                    color: CyberColors.player1.withValues(alpha: 0.8),
-                                    blurRadius: blur,
-                                  ),
-                                ],
+                              Text(
+                                "ARENA",
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w300,
+                                  letterSpacing: 16,
+                                  color: arenaColor,
+                                  shadows: [
+                                    Shadow(
+                                      color: arenaColor.withValues(alpha: 0.8),
+                                      blurRadius: arenaBlur,
+                                    ),
+                                  ],
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                      ],
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
